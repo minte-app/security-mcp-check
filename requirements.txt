@@ -1,0 +1,5 @@
+dspy-ai
+pydantic-ai[logfire]
+httpx
+openai
+beautifulsoup4
