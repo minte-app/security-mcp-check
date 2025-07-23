@@ -1,75 +1,83 @@
+import httpx
 import asyncio
-import json
+import argparse
+import subprocess
+from pathlib import Path
 from dotenv import load_dotenv
-import dspy
 
-from prompts.signatures import FileDiscovery, JSStaticAnalysis
-from tools.github_utils import (
-    parse_github_url,
-    coerce_paths,
-    list_files_from_github_api,
-    download_raw_file,
-)
+# Comprueba que existe al menos uno de los comandos y crea variables con los nombres sin guiones de su contenido
+def parse_args():
+    parser = argparse.ArgumentParser(description="JS Security Agent")
 
-# 1) Config LLM
-load_dotenv()
-lm = dspy.LM('openai/gpt-4o-mini', api_key="")
-dspy.configure(lm=lm)
+    group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument("--url", help="URL del repo GitHub (ej: https://github.com/user/repo)")
+    group.add_argument("--directory", type=Path, help="Ruta local al repo ya clonado")
 
-# 2) Instantiate modules AFTER configure
-selector = dspy.ChainOfThought(FileDiscovery)
-analyzer = dspy.ReAct(JSStaticAnalysis, tools=[])  # sin tools externas por ahora
+    return parser.parse_args()
 
-def pretty_print_report(filename: str, findings: list[dict]):
-    critical = [f for f in findings if f.get('severity') == 'CRITICAL']
-    warnings = [f for f in findings if f.get('severity') == 'WARNING']
-    print(f"🔍 {filename}")
-    print(f"   CRITICAL: {len(critical)} | WARNING: {len(warnings)}")
-    for f in findings:
-        sev = f.get('severity', '?')
-        print(f"  - [{sev}] {f.get('issue', 'Sin título')}")
-        print(f"    Explicación: {f.get('explanation', '')}")
-        if rec := f.get('recommendation'):
-            print(f"    Mitigación: {rec}")
-        if lh := f.get('line_hint'):
-            print(f"    Línea: {lh}")
+# Clona el repositorio y devuelve la ruta donde se encuentra
+def clone_repo(url: str, base_dir: Path = Path("repos")) -> Path:
+    # Asegura que existe la carpeta de todos los repositorios clonados
+    base_dir.mkdir(parents=True, exist_ok=True)
+    # Con "--depth 1" solo descarga el ultimo commit para agilizar, si es necesario historial commmits --> quitar
+    subprocess.run(["git", "clone", "--depth", "1", url], cwd=base_dir, check=True)
+    #Deduce el nombre de la carpeta que se acaba de crear para devolver ruta completa
+    repo_name = url.rstrip("/").split("/")[-1].removesuffix(".git")
+
+    return base_dir / repo_name
+
+# Devuelve una lista de strings con las rutas relativas de cada fichero (incluido subcarpetas) 
+def build_file_index(root: Path, exts=(".js", ".ts")) -> list[str]:
+    exts_lower = {e.lower() for e in exts}
+    return [str(p.relative_to(root)) for p in root.rglob("*") if p.is_file() and p.suffix.lower() in exts_lower]
 
 async def main():
+    # 1) Config LLM
+    load_dotenv()
+    args = parse_args()
     github_url = "https://github.com/rishipradeep-think41/gsuite-mcp/tree/master/src/"
-    gh_token = ""  # opcional
 
-    # 1) Obtener lista REAL de archivos .js/.ts mediante la API
-    owner, repo, branch, base_path = parse_github_url(github_url)
-    all_files = await list_files_from_github_api(owner, repo, branch, base_path, token=gh_token)
-    if not all_files:
-        print("No se encontraron ficheros .js/.ts en la ruta indicada")
+    # Clonamos repositorio o cogemos directamente el directorio
+    if args.url:
+        try:
+            repo_root = clone_repo(args.url, Path("repos"))
+        except subprocess.CalledProcessError:
+            print("❌ La url es incorrecta")
+            return
+        
+    else:
+        if not args.directory or not args.directory.is_dir():
+            print("❌ El directorio no existe")
+            return
+        else:
+            print("Ruta correcta, comenzamos a escanear...")
+        repo_root = args.directory.resolve()
+
+    
+    file_index = build_file_index(repo_root)
+    if not file_index:
+        print("❌ La url es incorrecta o no tiene ficheros para comprobar")
         return
 
-    # 2) (Opcional) Dejar que el LLM elija: si no quieres filtrado, comenta esto y usa todos
-    sel = selector(github_url=github_url, include_patterns=".js,.ts")
-    file_paths = coerce_paths(sel.file_paths) if sel.file_paths else [p for p, _ in all_files]
+    # Importamos el agente DESPUÉS de cargar .env (evitamos claves vacías)
+    from agent.pydantic_agent import security_agent, Deps, selector, analyzer
 
-    # 3) Filtrar la selección contra lo que realmente existe
-    lookup = {p: raw for p, raw in all_files}
-    chosen = [(p, lookup[p]) for p in file_paths if p in lookup]
-    if not chosen:
-        print("El modelo no eligió rutas válidas; analizaremos todas.")
-        chosen = all_files
-
-    # 4) Descargar y analizar
-    for path, raw_url in chosen:
-        try:
-            code = await download_raw_file(raw_url)
-        except Exception as e:
-            print(f"❌ No pude descargar {path}: {e}")
-            continue
-        result = analyzer(js_code=code, filename=path)
-        try:
-            findings = json.loads(result.findings_json)
-        except Exception:
-            print(f"⚠️ Salida no JSON para {path}:{result.findings_json}")
-            continue
-        pretty_print_report(path, findings)
+    # Ejecutamos agente con deps (incluimos httpx.AsyncClient por futuras tools externas)
+    async with httpx.AsyncClient() as client:
+        deps = Deps(
+            repo_root=repo_root,
+            file_index=file_index,
+            selector=selector,
+            analyzer=analyzer,
+            http=client,
+        )
+        instructions = (
+            f"Analiza el repo que está en: {repo_root}. "
+            "Lista los archivos con list_local_files, léelos con read_local_file y llama a analyze_with_dspy. "
+            "Devuelve un JSON final con todos los hallazgos."
+        )
+        result = await security_agent.run(instructions, deps=deps)
+        print(result.output)
 
 if __name__ == "__main__":
     asyncio.run(main())
