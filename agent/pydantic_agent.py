@@ -1,24 +1,23 @@
 import os
-from dotenv import load_dotenv
 from pydantic_ai import Agent, RunContext
 from pydantic_ai.models.openai import OpenAIModel
-import logfire
 import dspy
-
+# import logfire
 from deps.deps import Deps
 from prompts.signatures import FileDiscovery, JSStaticAnalysis, PromptComposer
-
-# Asegura que las variables de entorno estén cargadas
-load_dotenv()
-
-# LOGFIRE: Podemos pasar la clave directamnte, o dejarlo vacio para que la coja de .logfire
-# logfire.configure(token=os.getenv("LOGFIRE_TOKEN"))  
-# logfire.instrument_pydantic_ai()
 
 # DSPy config
 api_key = os.getenv("OPENAI_API_KEY")
 if not api_key:
     raise RuntimeError("Falta OPENAI_API_KEY en .env")
+
+logfire_token = os.getenv("LOGFIRE_TOKEN")
+if not logfire_token:
+    raise RuntimeError("Falta LOGFIRE_TOKEN en .env")
+
+# LOGFIRE: Podemos pasar la clave directamnte, o dejarlo vacio para que la coja de .logfire                                                       │
+# logfire.configure(token=os.getenv("LOGFIRE_TOKEN"))
+# logfire.instrument_pydantic_ai()   
 
 lm = dspy.LM('openai/gpt-4o-mini', api_key=api_key)
 dspy.configure(lm=lm)

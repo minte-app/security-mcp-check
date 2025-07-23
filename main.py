@@ -1,9 +1,9 @@
+import config
 import httpx
 import asyncio
 import argparse
 import subprocess
 from pathlib import Path
-from dotenv import load_dotenv
 
 # Comprueba que existe al menos uno de los comandos y crea variables con los nombres sin guiones de su contenido
 def parse_args():
@@ -33,7 +33,6 @@ def build_file_index(root: Path, exts=(".js", ".ts")) -> list[str]:
 
 async def main():
     # 1) Config LLM
-    load_dotenv()
     args = parse_args()
     github_url = "https://github.com/rishipradeep-think41/gsuite-mcp/tree/master/src/"
 

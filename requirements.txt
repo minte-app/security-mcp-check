@@ -3,3 +3,4 @@ pydantic-ai[logfire]
 httpx
 openai
 beautifulsoup4
+python-dotenv
