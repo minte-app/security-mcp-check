@@ -1,8 +1,6 @@
 <p align="center"><a href="https://minte.app/es" target="_blank"><img src="http://www.w3.org/2000/svg" width="400" alt="Security-Check Logo"></a></p>
 
-<p>
-<a href="https://docs.astral.sh/uv/guides/install-python/"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="Packagist"></a>
-<a href="https://github.com/astral-sh/ruff"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
+<p align="center">
 <a href="https://opensource.org/license/MIT"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
 </p>
 
@@ -22,20 +20,7 @@
 
 ---
 
-## 🧱 Stack técnico
-
-* **Python 3.10+**
-* **Pydantic AI**: orquestación del agente y herramientas (tools).
-* **DSPy**: firmas (signatures) y módulos LLM (`Predict`, `ChainOfThought`, `ReAct`).
-* **LiteLLM / OpenAI**: backend LLM. (Modelos probados: `gpt-4o-mini`).
-* **Git CLI**: para clonar repos (shallow clone).
-* **httpx**: cliente HTTP async (futuras extensiones).
-* **dotenv**: gestión de variables de entorno.
-* **Logfire (opcional)**: trazas y telemetría.
-
----
-
-## 📂 Estructura mínima del proyecto
+## 📂 Project Structure
 
 ```
 js-security-agent/
@@ -47,12 +32,11 @@ js-security-agent/
 │  └─ signatures.py
 ├─ config.py
 ├─ main.py
-├─ repos/              # aquí se clonan los repos
+├─ repos/              # here the cloned repos
 ├─ requirements.txt
 ├─ .env.example
 └─ .gitignore
 ```
-
 ---
 
 ## ⚙️ Installation
