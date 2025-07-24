@@ -1,18 +1,24 @@
+<p align="center"><a href="https://minte.app/es" target="_blank"><img src="http://www.w3.org/2000/svg" width="400" alt="Security-Check Logo"></a></p>
+
+<p>
+<a href="https://docs.astral.sh/uv/guides/install-python/"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="Packagist"></a>
+<a href="https://github.com/astral-sh/ruff"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
+<a href="https://opensource.org/license/MIT"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
+</p>
+
 # JS Security Agent
 
-> Agente híbrido (Pydantic AI + DSPy) para detectar fallos de seguridad en código **JavaScript/TypeScript** dentro de un repositorio de GitHub.
-
+> A hybrid AI-powered agent built with Pydantic AI and DSPy for detecting security issues in code files. It clones or uses a local GitHub repository, filters by file extensions whitelist, analyzes each file, and outputs a consolidated JSON report of findings.
 ---
 
-## 🎯 Objetivo
+## 🎯 Features
 
-Automatizar, de forma **simple y reproducible**, la revisión de seguridad básica en archivos `.js` y `.ts` de un proyecto. El agente:
-
-1. **Clona** (o usa) un repo local.
-2. **Indexa** los archivos de interés.
-3. **Genera dinámicamente** su `system_prompt` con DSPy.
-4. **Lee y analiza** cada fichero con un módulo ReAct de DSPy.
-5. Devuelve un **JSON con hallazgos clasificados** en `CRITICAL` o `WARNING`.
+- **Dependency Management:** Uses [UV](https://docs.astral.sh/uv/guides/install-python/) as the Python package manager.
+- **Formatting & Linting:** Integrates [Ruff](https://github.com/astral-sh/ruff) for code quality checks and autoformatting.
+- **Extensible Whitelist:** Configurable list of file extensions to analyze (e.g., `.js`, `.ts`, and future Python MCP).
+- **AI Modules:** Leverages DSPy signatures (`ChainOfThought`, `ReAct`, `Predict`) for prompt composition and static analysis.
+- **Asynchronous Execution:** Structure built on `asyncio` and `httpx.AsyncClient` for future HTTP integrations.
+- **JSON Output:** Final report serialized as pure JSON array for easy downstream consumption.
 
 ---
 
@@ -49,150 +55,87 @@ js-security-agent/
 
 ---
 
-## ⚙️ Instalación
+## ⚙️ Installation
 
-1. **Clona este repo** (o copia los 4 ficheros principales).
-2. **Crea y activa un entorno virtual**:
-
+1. **Install UV** (package manager):
    ```bash
-   python -m venv .venv
-   source .venv/bin/activate   # Linux/Mac
-   .venv\Scripts\activate      # Windows
+   pip install uv-cli
+   uv install
    ```
-3. **Instala dependencias**:
-
+2. **Clone this repo** and enter its directory:
    ```bash
-   pip install -r requirements.txt
+   git clone https://github.com/your_org/js-security-agent.git
+   cd js-security-agent
    ```
-4. **Configura el `.env`**:
-
-   * Duplica `.env.example` → `.env`.
-   * Añade tu clave de OpenAI (sin comillas):
-
+3. **Activate virtual environment** and install dependencies:
+   ```bash
+   uv venv .venv       # create and activate a venv
+   uv install          # installs from pyproject.toml
+   ```
+4. **Configure environment**:
+   - Copy `.env.example` to `.env`.
+   - Fill in your OpenAI key:
+     ```ini
+     OPENAI_API_KEY=sk-...
      ```
-     OPENAI_API_KEY=sk-xxxxxxxxxxxxxxxxxxxxxxxx
+   - (Optional) Logfire token:
+     ```ini
+     LOGFIRE_TOKEN=lfu-...
      ```
-   * (Opcional) Logfire:
-
-     ```
-     LOGFIRE_TOKEN=lfu_xxxxxxxxxxxxxxxxxxxxxx
-     ```
-
 ---
-
-## 🚀 Uso
-
-### Opción A: Clonar desde URL
-
+## 🚀 Usage
 ```bash
-python main.py --url https://github.com/usuario/repositorio
+# Clone a repo by URL
+python main.py --url https://github.com/user/repo
+
+# Or use an existing local clone
+python main.py --directory repos/user_repo
 ```
 
-* Acepta la **raíz del repo** (no uses `/tree/...` ni `/blob/...`).
-* El repo se clona dentro de `repos/`.
+The CLI supports two mutually exclusive options: `--url` or `--directory`. The agent will index files matching the whitelist in `ruff.toml` (e.g. `.js`, `.ts`), analyze each, and print a JSON report.
 
-### Opción B: Usar un directorio ya clonado
+## Configuration
+- **Whitelisted extensions**: Edit `ruff.toml` under `[tool.ruff]` with `extend-select` or a custom section:
+  ```toml
+  [tool.ruff]
+  ignore = []
+  select = []
+  my-extensions = [".js", ".ts", ".py"]
+  ```
+- **Ruff rules**: Add or disable rules in `ruff.toml`.
+- **Python MCP integration**: Future iterations will include Python `.py` files via DSPy MCP modules.
 
-```bash
-python main.py --directory repos/mi-repo
-```
-
-> Los parámetros `--url` y `--directory` son **mutuamente excluyentes**.
-
-### Salida
-
-En consola verás el JSON de hallazgos, algo como:
-
+## JSON Report Schema
+Each finding in the array has:
 ```json
-[
-  {
-    "issue": "Sensitive Data Exposure",
-    "severity": "CRITICAL",
-    "explanation": "Variables de entorno con claves expuestas en logs",
-    "recommendation": "Sanitizar errores y ocultar credenciales",
-    "line_hint": 42
-  }
-]
+{
+  "file_path": "src/file.js",
+  "issue": "Hardcoded credentials",
+  "severity": "CRITICAL",
+  "explanation": "...","
+  "recommendation": "...","
+  "line_hint": 42
+}
 ```
-
 ---
 
-## 🧠 Cómo funciona internamente
-
-1. **CLI / main.py**
-
-   * Parsea args (`--url` o `--directory`).
-   * Clona el repo (si procede) y crea un índice de archivos (`build_file_index`).
-   * Crea las **Deps** (dataclass) que se le pasan al agente.
-
-2. **Deps (deps.py)**
-
-   * Guarda: ruta del repo, lista de ficheros, módulos DSPy (`selector`, `analyzer`), cliente HTTP, etc.
-
-3. **DSPy Signatures (signatures.py)**
-
-   * `FileDiscovery` (opcional): filtrar archivos por patrones.
-   * `FileSelection`: priorizar qué revisar si son muchos.
-   * `JSStaticAnalysis`: define el contrato de salida (JSON, severidades...).
-   * `PromptComposer`: compone el system prompt dinámico.
-
-4. **Agente (agent/pydantic\_agent.py)**
-
-   * Configura DSPy (`dspy.configure(lm=...)`).
-   * Instancia los módulos DSPy: `ChainOfThought`, `ReAct`, `Predict`.
-   * Define el `security_agent = Agent(...)`.
-   * `@security_agent.system_prompt`: genera el prompt con `PromptComposer`.
-   * Tools expuestas:
-
-     * `list_local_files()`
-     * `read_local_file(path)`
-     * `analyze_with_dspy(filename, code)`
-     * `discover_files(include_patterns)` (opcional)
-
-5. **Flujo de ejecución**
-
-   * El agente recibe instrucciones (`instructions` en `main.py`).
-   * Usa tools para listar y leer archivos.
-   * Llama al módulo `analyzer` (ReAct) para cada fichero.
-   * Devuelve un JSON consolidado.
-
----
-
-## 🔐 Política de severidades
-
-* **CRITICAL**: RCE, escalada de privilegios, exfiltración de datos, `eval()/Function()` con input externo, inyección peligrosa, secrets hardcodeados.
-* **WARNING**: resto de problemas (falta de validación, DoS potencial, error handling inseguro, etc.).
-
----
-
-## 🛠️ Extender / Personalizar
-
-* **Otros lenguajes**: cambia `exts` en `build_file_index` y ajusta la signature.
-* **Más reglas de seguridad**: amplía `JSStaticAnalysis` y/o agrega un post-procesado.
-* **Herramientas extra**: añade tools para ejecutar linters, consultar APIs, etc.
-* **Optimización del prompt**: usa DSPy `MIPROv2`, `BootstrapFewShot`, etc. para refinar prompts/razonamientos.
+## 🔐 Severiry police
+- **CRITICAL**: Remote code execution (RCE), privilege escalation, data exfiltration, use of `eval()/Function()` with external input, dangerous injection patterns, hardcoded secrets.
+- **WARNING**: All other issues (missing input validation, potential Denial of Service, insecure error handling, etc.).
 
 ---
 
 ## ❗ Troubleshooting
 
-| Problema                                                                         | Causa / Solución                                                                        |
-| -------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
-| `fatal: repository ... not found`                                                | La URL incluye `/tree/...`. Usa la raíz del repo.                                       |
-| `❌ La url es incorrecta o no tiene ficheros`                                     Repo vacío o sin `.js/.ts`. Comprueba la ruta y extensiones.                            |
-| `PydanticSchemaGenerationError`                                                  | Estabas usando `BaseModel` con tipos arbitrarios. Cambiado a `@dataclass`.              |
-| `TypeError: OpenAIModel.__init__() got an unexpected keyword argument 'api_key'` | En tu versión de pydantic-ai no se pasa api\_key en el constructor. Quita el parámetro. |
-| `AuthenticationError 401`                                                        | Clave OpenAI inválida o con comillas en `.env`. Usa `sk-...` y sin comillas.            |
-| `No user tokens are available. Please run 'logfire auth'`                        | No tienes token de Logfire. Comenta la configuración o autentícate.                     |
+| Trouble                                                                          | Solution                                                        |
+| -------------------------------------------------------------------------------- | ---------------------------------------------------------------|
+| `fatal: repository ... not found`                                                | Use only the repo root URL, not `/tree/` or `/blob/` paths.    |
+| `❌ Incorrect url`                                                               | Empty repo. Ensure the path and extensions.                    |
+| `PydanticSchemaGenerationError`                                                  | You were using `BaseModel`, change to `@dataclass`.            |
+| `AuthenticationError 401`                                                        | Ensure `OPENAI_API_KEY` has no quotes and is valid.            |
+| `No user tokens are available. Please run 'logfire auth'`                        | Do not have a Logfire.                                         |
 
 ---
 
-## 📄 Licencia / Disclaimer
-
-Este agente es una **herramienta educativa**. No sustituye una auditoría profesional ni garantiza la ausencia de vulnerabilidades. Úsalo bajo tu propia responsabilidad y cumpliendo con las políticas de uso de los repositorios que analices.
-
----
-
-## 🙋‍♂️ Preguntas
-
-¿Quieres automatizar la corrección? ¿Cambiar el motor LLM? ¿Integrarlo en CI/CD? Abre un issue o pregúntame.
+## 📄 License / Disclaimer
+This security agent is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
