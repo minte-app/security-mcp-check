@@ -3,7 +3,7 @@ from pydantic_ai import Agent, RunContext
 from pydantic_ai.models.openai import OpenAIModel
 import dspy
 # import logfire
-from deps.deps import Deps
+from deps.deps import Deps, FindingsList
 from prompts.signatures import FileDiscovery, JSStaticAnalysis, PromptComposer
 
 # DSPy config
@@ -31,6 +31,7 @@ prompter = dspy.Predict(PromptComposer)
 security_agent = Agent(  
     'openai:gpt-4o-mini',
     deps_type=Deps,
+    output_type=FindingsList,
 )
 
 @security_agent.system_prompt
@@ -47,7 +48,7 @@ async def system_prompt(ctx : RunContext[Deps]) -> str:
     file_block = "\n".join(files)
 
     output_contract = (
-        "Devuelve un JSON array: [{issue, severity, explanation, recommendation, line_hint?}]. "
+        "Devuelve un JSON array: [{file_path, issue, severity, explanation, recommendation, line_hint?}]. "
         "Nada más que el JSON, sin texto adicional."
     )
     tools_hint = (

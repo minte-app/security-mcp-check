@@ -3,7 +3,10 @@ import httpx
 import asyncio
 import argparse
 import subprocess
+import json
 from pathlib import Path
+from deps.deps import FindingsList
+from dataclasses import asdict
 
 # Comprueba que existe al menos uno de los comandos y crea variables con los nombres sin guiones de su contenido
 def parse_args():
@@ -29,12 +32,11 @@ def clone_repo(url: str, base_dir: Path = Path("repos")) -> Path:
 # Devuelve una lista de strings con las rutas relativas de cada fichero (incluido subcarpetas) 
 def build_file_index(root: Path, exts=(".js", ".ts")) -> list[str]:
     exts_lower = {e.lower() for e in exts}
-    return [str(p.relative_to(root)) for p in root.rglob("*") if p.is_file() and p.suffix.lower() in exts_lower]
+    return [p.relative_to(root).as_posix() for p in root.rglob("*") if p.is_file() and p.suffix.lower() in exts_lower]
 
 async def main():
     # 1) Config LLM
     args = parse_args()
-    github_url = "https://github.com/rishipradeep-think41/gsuite-mcp/tree/master/src/"
 
     # Clonamos repositorio o cogemos directamente el directorio
     if args.url:
@@ -61,22 +63,60 @@ async def main():
     # Importamos el agente DESPUÉS de cargar .env (evitamos claves vacías)
     from agent.pydantic_agent import security_agent, Deps, selector, analyzer
 
+    all_findings = []
     # Ejecutamos agente con deps (incluimos httpx.AsyncClient por futuras tools externas)
     async with httpx.AsyncClient() as client:
-        deps = Deps(
-            repo_root=repo_root,
-            file_index=file_index,
-            selector=selector,
-            analyzer=analyzer,
-            http=client,
-        )
-        instructions = (
-            f"Analiza el repo que está en: {repo_root}. "
-            "Lista los archivos con list_local_files, léelos con read_local_file y llama a analyze_with_dspy. "
-            "Devuelve un JSON final con todos los hallazgos."
-        )
-        result = await security_agent.run(instructions, deps=deps)
-        print(result.output)
+        for file_path in file_index:
+            print(f"\n🔎 Analizando {file_path}...")
+            # Pasamos solo el fichero actual al contexto del agente
+            deps = Deps(
+                repo_root=repo_root,
+                file_index=file_path,
+                selector=selector,
+                analyzer=analyzer,
+                http=client,
+            )
+            instructions = (
+                f"Analiza el fichero '{file_path}'. "
+                "Llama a read_local_file para leer su contenido y luego a analyze_with_dspy para analizarlo. "
+                "Devuelve solo el JSON con los hallazgos."
+            )
+            try:
+                result = await security_agent.run(instructions, deps=deps)
+                
+                # Ahora result.output es un FindingsList
+                findings_list: FindingsList = result.output
+                findings = findings_list.__root__   # lista de Finding
+                if findings:
+                    # Añadimos el nombre del fichero a cada hallazgo para tener contexto
+                    for finding in findings:
+                        all_findings.append(finding)
+                    print(f"✅ Se encontraron {len(findings)} posibles problemas en {file_path}")
+                else:
+                    print(f"✔️ {file_path} analizado. No se encontraron problemas.")
+            except json.JSONDecodeError:
+                print(f"⚠️ No se pudo decodificar la respuesta para {file_path}. Salida: {result.output}")
+            except Exception as e:
+                print(f"❌ Error analizando {file_path}: {e}")
+
+    # Imprimimos el resultado final
+    if all_findings:
+        # Convertimos cada instancia a dict y Serializamos a JSON
+        plain_list = [asdict(f) for f in all_findings]
+        json_text = json.dumps(plain_list, indent=2, ensure_ascii=False)
+        
+        print("--- INFORME FINAL ---")
+        print(json_text)
+    else:
+        print("--- INFORME FINAL ---")
+        print("✔️ No se encontraron vulnerabilidades en ningún fichero.")
+
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except RuntimeError as e:
+        if "Event loop is closed" in str(e):
+            pass  # lo ignoramos, ya hemos terminado
+        else:
+            raise
