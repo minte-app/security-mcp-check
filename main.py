@@ -1,12 +1,22 @@
 import config
-import httpx
-import asyncio
 import argparse
-import subprocess
+import asyncio
 import json
-from pathlib import Path
-from deps.deps import FindingsList
+import subprocess
 from dataclasses import asdict
+from pathlib import Path
+
+import httpx
+import tomli as tomllib
+
+from deps.deps import FindingsList
+
+
+# Extrae la lista de extensiones a comprobar
+def load_whitelist(path: Path) -> list[str]:
+    cfg = tomllib.loads(path.read_text(encoding="utf-8"))
+    return cfg.get("whitelist", {}).get("extensions", [])
+
 
 # Comprueba que existe al menos uno de los comandos y crea variables con los nombres sin guiones de su contenido
 def parse_args():
@@ -18,21 +28,24 @@ def parse_args():
 
     return parser.parse_args()
 
+
 # Clona el repositorio y devuelve la ruta donde se encuentra
 def clone_repo(url: str, base_dir: Path = Path("repos")) -> Path:
     # Asegura que existe la carpeta de todos los repositorios clonados
     base_dir.mkdir(parents=True, exist_ok=True)
     # Con "--depth 1" solo descarga el ultimo commit para agilizar, si es necesario historial commmits --> quitar
     subprocess.run(["git", "clone", "--depth", "1", url], cwd=base_dir, check=True)
-    #Deduce el nombre de la carpeta que se acaba de crear para devolver ruta completa
+    # Deduce el nombre de la carpeta que se acaba de crear para devolver ruta completa
     repo_name = url.rstrip("/").split("/")[-1].removesuffix(".git")
 
     return base_dir / repo_name
 
-# Devuelve una lista de strings con las rutas relativas de cada fichero (incluido subcarpetas) 
-def build_file_index(root: Path, exts=(".js", ".ts")) -> list[str]:
+
+# Devuelve una lista de strings con las rutas relativas de cada fichero (incluido subcarpetas)
+def build_file_index(root: Path, exts) -> list[str]:
     exts_lower = {e.lower() for e in exts}
     return [p.relative_to(root).as_posix() for p in root.rglob("*") if p.is_file() and p.suffix.lower() in exts_lower]
+
 
 async def main():
     # 1) Config LLM
@@ -45,7 +58,7 @@ async def main():
         except subprocess.CalledProcessError:
             print("❌ La url es incorrecta")
             return
-        
+
     else:
         if not args.directory or not args.directory.is_dir():
             print("❌ El directorio no existe")
@@ -54,14 +67,20 @@ async def main():
             print("Ruta correcta, comenzamos a escanear...")
         repo_root = args.directory.resolve()
 
-    
-    file_index = build_file_index(repo_root)
+    config_path = Path("pyproject.toml")
+    if not config_path.exists():
+        print("⚠ Warning: whitelist config not found, defaulting to .js/.ts")
+        exts = [".js", ".ts"]
+    else:
+        exts = load_whitelist(config_path)
+
+    file_index = build_file_index(repo_root, exts)
     if not file_index:
         print("❌ La url es incorrecta o no tiene ficheros para comprobar")
         return
 
     # Importamos el agente DESPUÉS de cargar .env (evitamos claves vacías)
-    from agent.pydantic_agent import security_agent, Deps, selector, analyzer
+    from agent.pydantic_agent import Deps, analyzer, security_agent, selector
 
     all_findings = []
     # Ejecutamos agente con deps (incluimos httpx.AsyncClient por futuras tools externas)
@@ -83,10 +102,10 @@ async def main():
             )
             try:
                 result = await security_agent.run(instructions, deps=deps)
-                
+
                 # Ahora result.output es un FindingsList
                 findings_list: FindingsList = result.output
-                findings = findings_list.__root__   # lista de Finding
+                findings = findings_list.__root__  # lista de Finding
                 if findings:
                     # Añadimos el nombre del fichero a cada hallazgo para tener contexto
                     for finding in findings:
@@ -104,7 +123,7 @@ async def main():
         # Convertimos cada instancia a dict y Serializamos a JSON
         plain_list = [asdict(f) for f in all_findings]
         json_text = json.dumps(plain_list, indent=2, ensure_ascii=False)
-        
+
         print("--- INFORME FINAL ---")
         print(json_text)
     else:

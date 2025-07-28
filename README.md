@@ -4,9 +4,9 @@
 <a href="https://opensource.org/license/MIT"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
 </p>
 
-# JS Security Agent
+# MCP Security Check
 
-> A hybrid AI-powered agent built with Pydantic AI and DSPy for detecting security issues in code files. It clones or uses a local GitHub repository, filters by file extensions whitelist, analyzes each file, and outputs a consolidated JSON report of findings.
+> An AI‑driven agent that scans the entire MCP codebase, evaluates potential security issues, and produces a comprehensive final report.
 ---
 
 ## 🎯 Features
@@ -23,7 +23,7 @@
 ## 📂 Project Structure
 
 ```
-js-security-agent/
+security-mcp-check/
 ├─ agent/
 │  └─ pydantic_agent.py
 ├─ deps/
@@ -36,20 +36,22 @@ js-security-agent/
 ├─ requirements.txt
 ├─ .env.example
 └─ .gitignore
+└─ pyproject.toml
 ```
 ---
 
 ## ⚙️ Installation
 
-1. **Install UV** (package manager):
+1. **Install UV and Ruff** (package manager):
    ```bash
    pip install uv-cli
    uv install
+   uv tool install ruff@latest
    ```
 2. **Clone this repo** and enter its directory:
    ```bash
-   git clone https://github.com/your_org/js-security-agent.git
-   cd js-security-agent
+   git clone https://github.com/your_org/security-mcp-check.git
+   cd security-mcp-check
    ```
 3. **Activate virtual environment** and install dependencies:
    ```bash
@@ -79,15 +81,12 @@ python main.py --directory repos/user_repo
 The CLI supports two mutually exclusive options: `--url` or `--directory`. The agent will index files matching the whitelist in `ruff.toml` (e.g. `.js`, `.ts`), analyze each, and print a JSON report.
 
 ## Configuration
-- **Whitelisted extensions**: Edit `ruff.toml` under `[tool.ruff]` with `extend-select` or a custom section:
+- **Whitelisted extensions**: Edit `pyproject.toml` under `[whitelist]` with `extend-select` or a custom section:
   ```toml
-  [tool.ruff]
-  ignore = []
-  select = []
-  my-extensions = [".js", ".ts", ".py"]
+  [whitelist]
+  extensions = [".js", ".ts", ".py"]  
   ```
-- **Ruff rules**: Add or disable rules in `ruff.toml`.
-- **Python MCP integration**: Future iterations will include Python `.py` files via DSPy MCP modules.
+- **Ruff rules**: Add or disable rules in `pyproject.toml`.
 
 ## JSON Report Schema
 Each finding in the array has:
