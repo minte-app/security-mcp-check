@@ -4,3 +4,4 @@ httpx
 openai
 beautifulsoup4
 python-dotenv
+PyYAML

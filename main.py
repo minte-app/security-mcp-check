@@ -1,4 +1,3 @@
-import config
 import argparse
 import asyncio
 import json
@@ -7,14 +6,16 @@ from dataclasses import asdict
 from pathlib import Path
 
 import httpx
-import tomli as tomllib
+import yaml
 
+import config
 from deps.deps import FindingsList
 
 
 # Extrae la lista de extensiones a comprobar
 def load_whitelist(path: Path) -> list[str]:
-    cfg = tomllib.loads(path.read_text(encoding="utf-8"))
+    with open(path, encoding="utf-8") as f:
+        cfg = yaml.safe_load(f)
     return cfg.get("whitelist", {}).get("extensions", [])
 
 
@@ -42,9 +43,34 @@ def clone_repo(url: str, base_dir: Path = Path("repos")) -> Path:
 
 
 # Devuelve una lista de strings con las rutas relativas de cada fichero (incluido subcarpetas)
-def build_file_index(root: Path, exts) -> list[str]:
+def build_file_index(root: Path, exts) -> tuple[list[str], list[str]]:
     exts_lower = {e.lower() for e in exts}
-    return [p.relative_to(root).as_posix() for p in root.rglob("*") if p.is_file() and p.suffix.lower() in exts_lower]
+    indexed_files = []
+    non_indexed_files = []
+
+    # Patrones a ignorar
+    ignore_parts = {"repos",".git", ".github", ".vscode", "node_modules", "dist", "build", "__pycache__"}
+    ignore_files = {"LICENSE", "LICENSE.md", ".gitignore", "README.md"}
+
+    for p in root.rglob("*"):
+        relative_path = p.relative_to(root)
+        
+        # Ignorar directorios completos
+        if any(part in ignore_parts for part in relative_path.parts):
+            continue
+
+        if p.is_file():
+            # Ignorar ficheros específicos
+            if p.name in ignore_files:
+                continue
+            
+            path_str = relative_path.as_posix()
+            if p.suffix.lower() in exts_lower:
+                indexed_files.append(path_str)
+            else:
+                non_indexed_files.append(path_str)
+                
+    return indexed_files, non_indexed_files
 
 
 async def main():
@@ -67,14 +93,14 @@ async def main():
             print("Ruta correcta, comenzamos a escanear...")
         repo_root = args.directory.resolve()
 
-    config_path = Path("pyproject.toml")
+    config_path = Path("whitelist.yaml")
     if not config_path.exists():
         print("⚠ Warning: whitelist config not found, defaulting to .js/.ts")
         exts = [".js", ".ts"]
     else:
         exts = load_whitelist(config_path)
 
-    file_index = build_file_index(repo_root, exts)
+    file_index, non_indexed_files = build_file_index(repo_root, exts)
     if not file_index:
         print("❌ La url es incorrecta o no tiene ficheros para comprobar")
         return
@@ -129,6 +155,11 @@ async def main():
     else:
         print("--- INFORME FINAL ---")
         print("✔️ No se encontraron vulnerabilidades en ningún fichero.")
+
+    if non_indexed_files:
+        print("\n--- FICHEROS NO ANALIZADOS ---")
+        for file in non_indexed_files:
+            print(f"- {file}")
 
 
 if __name__ == "__main__":

@@ -1,6 +1,3 @@
-[whitelist] # Extensions to analize
-extensions = [".js", ".ts", ".py"]
-
 [tool.ruff]
 line-length = 120
 
@@ -21,6 +18,7 @@ select = [
 ]
 # Avoid options recomended 
 ignore = [
+  "F401", # unused imports -> "import congif" in main.py is necessary
   "W191",  # tab-indentation
   "E111",  # indentation-with-invalid-multiple
   "E114",  # indentation-with-invalid-multiple-comment

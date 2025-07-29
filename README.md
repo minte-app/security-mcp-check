@@ -81,10 +81,10 @@ python main.py --directory repos/user_repo
 The CLI supports two mutually exclusive options: `--url` or `--directory`. The agent will index files matching the whitelist in `ruff.toml` (e.g. `.js`, `.ts`), analyze each, and print a JSON report.
 
 ## Configuration
-- **Whitelisted extensions**: Edit `pyproject.toml` under `[whitelist]` with `extend-select` or a custom section:
-  ```toml
-  [whitelist]
-  extensions = [".js", ".ts", ".py"]  
+- **Whitelisted extensions**: Edit `whitelist.yaml` to configure the extensions to be analyzed:
+  ```yaml
+  whitelist:
+    extensions: [".js", ".ts", ".py"]
   ```
 - **Ruff rules**: Add or disable rules in `pyproject.toml`.
 
