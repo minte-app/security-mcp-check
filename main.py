@@ -1,6 +1,7 @@
 import argparse
 import asyncio
 import json
+import re
 import subprocess
 import yaml
 from collections import defaultdict
@@ -36,14 +37,50 @@ def parse_args():
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--url", help="URL of the GitHub repo (e.g., https://github.com/user/repo)")
     group.add_argument("--directory", type=Path, help="Local path to the already cloned repo")
+    
     return parser.parse_args()
 
-def clone_repo(url: str, base_dir: Path = Path("repos")) -> Path:
+def get_repo(url: str, base_dir: Path = Path("repos")) -> Path:
     base_dir.mkdir(parents=True, exist_ok=True)
     repo_name = url.rstrip("/").split("/")[-1].removesuffix(".git")
     repo_path = base_dir / repo_name
-    if not repo_path.exists():
-        subprocess.run(["git", "clone", "--depth", "1", url, str(repo_path)], cwd=base_dir, check=True)
+
+    def get_default_branch(path: Path) -> str:
+        try:
+            result = subprocess.run(
+                ["git", "remote", "show", "origin"], 
+                cwd=path, 
+                check=True, 
+                capture_output=True, 
+                text=True
+            )
+            match = re.search(r"HEAD branch: (\S+)", result.stdout)
+            if match:
+                return match.group(1)
+            # Fallback for older Git versions or unusual remote configs
+            return "master"
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            # Fallback if git command fails or not in a git repo
+            return "master"
+
+    if repo_path.exists():
+        print(f"[+] Repository already exists at {repo_path}.")
+        print(f"[+] Resetting to remote state of default branch...")
+        try:
+            subprocess.run(["git", "fetch", "origin"], cwd=repo_path, check=True, capture_output=True)
+            subprocess.run(["git", "reset", "--hard", "origin/HEAD"], cwd=repo_path, check=True, capture_output=True)
+            subprocess.run(["git", "clean", "-fdx"], cwd=repo_path, check=True, capture_output=True)
+        except subprocess.CalledProcessError as e:
+            print(f"[x] Error resetting repository: {e.stderr}")
+            raise
+    else:
+        print(f"[*] Cloning repository {url}...")
+        clone_cmd = ["git", "clone", url]
+        try:
+            subprocess.run(clone_cmd, cwd=base_dir, check=True, capture_output=True, text=True)
+        except subprocess.CalledProcessError as e:
+            print(f"[x] Error cloning repository: {e.stderr}")
+            raise
     return repo_path
 
 def build_file_index(root: Path, allowed_exts: Set[str], ignored_dirs: Set[str], ignored_files: Set[str]) -> tuple[list[str], list[str]]:
@@ -105,30 +142,30 @@ async def main():
     # 1. Load configurations
     whitelisted_exts = set(e.lower() for e in load_whitelist(Path("whitelist.yaml")))
     if not whitelisted_exts:
-        print("❌ The 'whitelist.yaml' file does not exist or is empty. Nothing to analyze.")
+        print("[x] The 'whitelist.yaml' file does not exist or is empty. Nothing to analyze.")
         return
 
     ignored_dirs, ignored_files = load_blacklist(Path("blacklist.yaml"))
     rules_map = load_rules(Path("rules"), allowed_extensions=whitelisted_exts)
     if not rules_map:
-        print("❌ No rules found for the extensions specified in 'whitelist.yaml'.")
+        print("[x] No rules found for the extensions specified in 'whitelist.yaml'.")
         return
-    print(f"✅ {len(rules_map)} language rule(s) loaded according to the whitelist.")
+    print(f"[+] {len(rules_map)} language rule(s) loaded according to the whitelist.")
 
     for ext in whitelisted_exts:
         if ext not in rules_map:
-            print(f"⚠️ Warning: Extension '{ext}' is in the whitelist but no rule was found for it.")
+            print(f"[!] Warning: Extension '{ext}' is in the whitelist but no rule was found for it.")
 
     # 2. Get the source code
     if args.url:
         try:
-            repo_root = clone_repo(args.url, Path("repos"))
+            repo_root = get_repo(args.url, Path("repos"))
         except subprocess.CalledProcessError:
-            print("❌ The repository URL is incorrect or does not exist.")
+            print("[x] The repository URL is incorrect or does not exist.")
             return
     else:
         if not args.directory or not args.directory.is_dir():
-            print("❌ The specified directory does not exist.")
+            print("[x] The specified directory does not exist.")
             return
         repo_root = args.directory.resolve()
 
@@ -138,9 +175,9 @@ async def main():
     report_path = Path("reports") / f"{repo_name}-security-report.md"
 
     if not file_index:
-        print("❌ No files with the whitelisted extensions were found in the repository.")
+        print("[x] No files with the whitelisted extensions were found in the repository.")
         generate_markdown_report([], non_indexed_files, report_path)
-        print(f"✅ Report generated for unanalyzed files at: {report_path.resolve()}")
+        print(f"[+] Report generated for unanalyzed files at: {report_path.resolve()}")
         return
 
     # 4. Import and run the agent
@@ -155,7 +192,7 @@ async def main():
             if not active_rule:
                 continue
 
-            print(f"\n🔎 Analyzing {file_path} with {active_rule.language} rules...")
+            print(f"[*] Analyzing {file_path} with {active_rule.language} rules...")
             
             deps = Deps(
                 repo_root=repo_root,
@@ -179,18 +216,18 @@ async def main():
                 if findings:
                     for finding in findings:
                         all_findings.append(finding)
-                    print(f"✅ Found {len(findings)} potential issues in {file_path}")
+                    print(f"[+] Found {len(findings)} potential issues in {file_path}")
                 else:
-                    print(f"✔️ {file_path} analyzed. No issues found.")
+                    print(f"[+] {file_path} analyzed. No issues found.")
             except json.JSONDecodeError:
-                print(f"⚠️ Could not decode the response for {file_path}. Output: {result.output}")
+                print(f"[!] Could not decode the response for {file_path}. Output: {result.output}")
             except Exception as e:
-                print(f"❌ Error analyzing {file_path}: {e}")
+                print(f"[x] Error analyzing {file_path}: {e}")
 
     # 5. Generate and save the final report
     generate_markdown_report(all_findings, non_indexed_files, report_path)
     print(f"\n--- FINAL REPORT ---")
-    print(f"✅ Report successfully generated at: {report_path.resolve()}")
+    print(f"[+] Report successfully generated at: {report_path.resolve()}")
 
 if __name__ == "__main__":
     try:
