@@ -3,17 +3,17 @@ import asyncio
 import json
 import subprocess
 import yaml
+from collections import defaultdict
 from dataclasses import asdict
 from pathlib import Path
-from typing import Set, Tuple
+from typing import Set, Tuple, List
 
 import httpx
 
-import config  # necesario para overridear variables de entorno
-from deps.deps import FindingsList
+import config  # Import to override environment variables
+from deps.deps import FindingsList, Finding
 from agent.rules import load_rules
 
-# Extrae la lista de extensiones a comprobar
 def load_whitelist(path: Path) -> list[str]:
     if not path.exists():
         return []
@@ -34,25 +34,19 @@ def load_blacklist(path: Path) -> Tuple[Set[str], Set[str]]:
 def parse_args():
     parser = argparse.ArgumentParser(description="AI Security Agent")
     group = parser.add_mutually_exclusive_group(required=True)
-    group.add_argument("--url", help="URL del repo GitHub (ej: https://github.com/user/repo)")
-    group.add_argument("--directory", type=Path, help="Ruta local al repo ya clonado")
+    group.add_argument("--url", help="URL of the GitHub repo (e.g., https://github.com/user/repo)")
+    group.add_argument("--directory", type=Path, help="Local path to the already cloned repo")
     return parser.parse_args()
 
-
-# Clona el repositorio y devuelve la ruta donde se encuentra
 def clone_repo(url: str, base_dir: Path = Path("repos")) -> Path:
-    # Asegura que existe la carpeta de todos los repositorios clonados
     base_dir.mkdir(parents=True, exist_ok=True)
-    # Con "--depth 1" solo descarga el ultimo commit para agilizar, si es necesario historial commmits --> quitar
-    subprocess.run(["git", "clone", "--depth", "1", url], cwd=base_dir, check=True)
-    # Deduce el nombre de la carpeta que se acaba de crear para devolver ruta completa
     repo_name = url.rstrip("/").split("/")[-1].removesuffix(".git")
-    return base_dir / repo_name
+    repo_path = base_dir / repo_name
+    if not repo_path.exists():
+        subprocess.run(["git", "clone", "--depth", "1", url, str(repo_path)], cwd=base_dir, check=True)
+    return repo_path
 
-
-# Devuelve una lista de strings con las rutas relativas de cada fichero (incluido subcarpetas)
-def build_file_index(root: Path, exts, ignored_dirs, ignored_files) -> tuple[list[str], list[str]]:
-    exts_lower = {e.lower() for e in exts}
+def build_file_index(root: Path, allowed_exts: Set[str], ignored_dirs: Set[str], ignored_files: Set[str]) -> tuple[list[str], list[str]]:
     indexed_files = []
     non_indexed_files = []
 
@@ -64,52 +58,92 @@ def build_file_index(root: Path, exts, ignored_dirs, ignored_files) -> tuple[lis
             if p.name in ignored_files:
                 continue
             path_str = relative_path.as_posix()
-            if p.suffix.lower() in exts_lower:
+            if p.suffix.lower() in allowed_exts:
                 indexed_files.append(path_str)
             else:
                 non_indexed_files.append(path_str)
     return indexed_files, non_indexed_files
 
+def generate_markdown_report(findings: List[Finding], unanalyzed_files: List[str], output_path: Path):
+    """Generates a Markdown report with colors from the list of findings."""
+    report_content = "# Security Analysis Report\n\nThis report details the security vulnerabilities found by the AI agent.\n"
+
+    if not findings:
+        report_content += "\n**No security vulnerabilities were found in the analyzed files.**\n"
+    else:
+        findings_by_file = defaultdict(list)
+        for f in findings:
+            findings_by_file[f.file_path].append(f)
+
+        for file_path, file_findings in sorted(findings_by_file.items()):
+            report_content += f"\n---\n\n### File: `{file_path}`\n\n"
+            report_content += "| Severity | Issue | Explanation | Recommendation | Line |\n"
+            report_content += "|----------|-------|-------------|----------------|------|\n"
+            for f in sorted(file_findings, key=lambda x: x.severity):
+                line = f.line_hint if f.line_hint is not None else "N/A"
+                recommendation = f.recommendation if f.recommendation is not None else "-"
+                
+                severity_cell = f.severity
+                if f.severity == "CRITICAL":
+                    severity_cell = "<font color='red'>CRITICAL</font>"
+                elif f.severity == "WARNING":
+                    severity_cell = "<font color='orange'>WARNING</font>"
+
+                report_content += f"| {severity_cell} | {f.issue} | {f.explanation} | {recommendation} | {line} |\n"
+
+    if unanalyzed_files:
+        report_content += "\n---\n\n## Unanalyzed Files\n\nThe following files were not analyzed because their extensions are not in the whitelist or they are in the blacklist:\n\n"
+        report_content += "\n".join([f"- `{f}`" for f in sorted(unanalyzed_files)])
+
+    # Ensure the reports directory exists
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(report_content, encoding="utf-8")
+
 async def main():
     args = parse_args()
 
-    # 1. Cargar configuraciones
+    # 1. Load configurations
     whitelisted_exts = set(e.lower() for e in load_whitelist(Path("whitelist.yaml")))
     if not whitelisted_exts:
-        print("❌ El fichero 'whitelist.yaml' no existe o está vacío. No hay nada que analizar.")
+        print("❌ The 'whitelist.yaml' file does not exist or is empty. Nothing to analyze.")
         return
 
     ignored_dirs, ignored_files = load_blacklist(Path("blacklist.yaml"))
     rules_map = load_rules(Path("rules"), allowed_extensions=whitelisted_exts)
     if not rules_map:
-        print("❌ No se encontraron reglas para las extensiones especificadas en 'whitelist.yaml'.")
+        print("❌ No rules found for the extensions specified in 'whitelist.yaml'.")
         return
-    print(f"✅ {len(rules_map)} reglas de lenguaje cargadas según la whitelist.")
+    print(f"✅ {len(rules_map)} language rule(s) loaded according to the whitelist.")
 
     for ext in whitelisted_exts:
         if ext not in rules_map:
-            print(f"⚠️ Aviso: La extensión '{ext}' está en la whitelist pero no se encontró una regla para ella.")
+            print(f"⚠️ Warning: Extension '{ext}' is in the whitelist but no rule was found for it.")
 
-    # 2. Obtener el código fuente
+    # 2. Get the source code
     if args.url:
         try:
             repo_root = clone_repo(args.url, Path("repos"))
         except subprocess.CalledProcessError:
-            print("❌ La url del repositorio es incorrecta o no existe.")
+            print("❌ The repository URL is incorrect or does not exist.")
             return
     else:
         if not args.directory or not args.directory.is_dir():
-            print("❌ El directorio especificado no existe.")
+            print("❌ The specified directory does not exist.")
             return
         repo_root = args.directory.resolve()
 
-    # 3. Indexar ficheros
+    # 3. Index files
     file_index, non_indexed_files = build_file_index(repo_root, whitelisted_exts, ignored_dirs, ignored_files)
+    repo_name = repo_root.name
+    report_path = Path("reports") / f"{repo_name}-security-report.md"
+
     if not file_index:
-        print("❌ No se encontraron ficheros con las extensiones de la whitelist en el repositorio.")
+        print("❌ No files with the whitelisted extensions were found in the repository.")
+        generate_markdown_report([], non_indexed_files, report_path)
+        print(f"✅ Report generated for unanalyzed files at: {report_path.resolve()}")
         return
 
-    # 4. Importar y ejecutar el agente
+    # 4. Import and run the agent
     from agent.pydantic_agent import Deps, analyzer, security_agent
 
     all_findings = []
@@ -121,7 +155,7 @@ async def main():
             if not active_rule:
                 continue
 
-            print(f"\n🔎 Analizando {file_path} con reglas para {active_rule.language}...")
+            print(f"\n🔎 Analyzing {file_path} with {active_rule.language} rules...")
             
             deps = Deps(
                 repo_root=repo_root,
@@ -133,8 +167,8 @@ async def main():
             )
             
             instructions = (
-                f"Analiza el fichero '{file_path}' usando las reglas de {active_rule.language}. "
-                "Llama a `read_current_file` y luego a `analyze_code`."
+                f"Analyze the file '{file_path}' using the rules for {active_rule.language}. "
+                "First, call `read_current_file` to get the code, then call `analyze_code` to analyze it."
             )
 
             try:
@@ -145,28 +179,18 @@ async def main():
                 if findings:
                     for finding in findings:
                         all_findings.append(finding)
-                    print(f"✅ Se encontraron {len(findings)} posibles problemas en {file_path}")
+                    print(f"✅ Found {len(findings)} potential issues in {file_path}")
                 else:
-                    print(f"✔️ {file_path} analizado. No se encontraron problemas.")
+                    print(f"✔️ {file_path} analyzed. No issues found.")
             except json.JSONDecodeError:
-                print(f"⚠️ No se pudo decodificar la respuesta para {file_path}. Salida: {result.output}")
+                print(f"⚠️ Could not decode the response for {file_path}. Output: {result.output}")
             except Exception as e:
-                print(f"❌ Error analizando {file_path}: {e}")
+                print(f"❌ Error analyzing {file_path}: {e}")
 
-    # 5. Imprimir informe final
-    if all_findings:
-        plain_list = [asdict(f) for f in all_findings]
-        json_text = json.dumps(plain_list, indent=2, ensure_ascii=False)
-        print("\n--- INFORME FINAL ---")
-        print(json_text)
-    else:
-        print("\n--- INFORME FINAL ---")
-        print("✔️ No se encontraron vulnerabilidades en ningún fichero.")
-
-    if non_indexed_files:
-        print("\n--- FICHEROS NO ANALIZADOS (no en whitelist o en blacklist) ---")
-        for file in non_indexed_files:
-            print(f"- {file}")
+    # 5. Generate and save the final report
+    generate_markdown_report(all_findings, non_indexed_files, report_path)
+    print(f"\n--- FINAL REPORT ---")
+    print(f"✅ Report successfully generated at: {report_path.resolve()}")
 
 if __name__ == "__main__":
     try:
@@ -176,4 +200,3 @@ if __name__ == "__main__":
             pass
         else:
             raise
-
