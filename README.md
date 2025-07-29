@@ -95,8 +95,8 @@ Each finding in the array has:
   "file_path": "src/file.js",
   "issue": "Hardcoded credentials",
   "severity": "CRITICAL",
-  "explanation": "...","
-  "recommendation": "...","
+  "explanation": "...",
+  "recommendation": "...",
   "line_hint": 42
 }
 ```

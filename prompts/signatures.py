@@ -9,20 +9,20 @@ class FileDiscovery(dspy.Signature):
     file_paths: list[str] = dspy.OutputField(desc="JSON array de paths a auditar")
 
 
-class JSStaticAnalysis(dspy.Signature):
-    """Analiza un archivo JS/TS y devuelve un reporte estructurado.
+class StaticCodeAnalysis(dspy.Signature):
+    """Analiza un archivo de código fuente y devuelve un reporte estructurado.
 
     **findings_json** debe ser un **array JSON** donde cada elemento es un objeto con:
       - issue: breve título del problema
-      - severity: "CRITICAL" o "WARNING" (CRITICAL = escalada de privilegios, exfiltración de datos,
-        RCE, inyecciones peligrosas, uso de `eval`/`Function` sobre input externo, secrets hardcodeados, etc.)
+      - severity: "CRITICAL" o "WARNING"
       - explanation: por qué es un problema
       - recommendation: cómo mitigarlo
       - line_hint (opcional): línea o fragmento relevante
     """
 
-    js_code: str = dspy.InputField(desc="JavaScript/TypeScript source code")
+    code: str = dspy.InputField(desc="Source code of the file to analyze")
     filename: str = dspy.InputField(desc="Repo-relative path of the file")
+    language_instructions: str = dspy.InputField(desc="Specific instructions for the language")
     findings_json: str = dspy.OutputField(desc="JSON array of findings with severity CRITICAL/WARNING")
 
 

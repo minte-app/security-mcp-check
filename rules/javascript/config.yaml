@@ -1,0 +1,7 @@
+
+language: JavaScript
+extensions:
+  - ".js"
+  - ".ts"
+  - ".jsx"
+  - ".tsx"

@@ -6,15 +6,18 @@ import dspy
 import httpx
 
 
+from agent.rules import LanguageRule
+
 @dataclass
 class Deps:
     """Dependencias accesibles vía RunContext.deps"""
 
-    repo_root: Path  # Ruta al repositorio clonado
-    file_index: list[str]  # Lista de los archivos a verificar
-    selector: dspy.Module  # dspy.ChainOfThought(FileDiscovery)
-    analyzer: dspy.Module  # dspy.ReAct(JSStaticAnalysis)
-    http: Optional[httpx.AsyncClient] = None  # cliente HTTP reutilizable
+    repo_root: Path
+    file_index: str  # Fichero que se está analizando
+    selector: dspy.Module
+    analyzer: dspy.Module
+    active_rule: Optional[LanguageRule] = None # Regla para el lenguaje actual
+    http: Optional[httpx.AsyncClient] = None
 
 
 @dataclass

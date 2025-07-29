@@ -1,0 +1,18 @@
+blacklist:
+  # Ignora cualquier fichero dentro de estos directorios
+  directories:
+    - "repos"
+    - ".git"
+    - ".github"
+    - ".vscode"
+    - "node_modules"
+    - "dist"
+    - "build"
+    - "__pycache__"
+
+  # Ignora ficheros específicos por su nombre exacto
+  files:
+    - "LICENSE"
+    - "LICENSE.md"
+    - ".gitignore"
+    - "README.md"
