@@ -5,7 +5,12 @@ import re
 import subprocess
 from pathlib import Path
 
+import sys
+
 import httpx
+
+if sys.platform == "win32":
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
 import config  # noqa: F401 # Import to override environment variables
 from agent.rules import load_rules

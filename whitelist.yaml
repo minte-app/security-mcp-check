@@ -1,2 +1,0 @@
-whitelist:
-  extensions: [".js", ".ts", ".py"]
