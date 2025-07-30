@@ -5,8 +5,8 @@ from typing import Literal, Optional
 import dspy
 import httpx
 
-
 from agent.rules import LanguageRule
+
 
 @dataclass
 class Deps:

@@ -1,8 +1,10 @@
 
-import yaml
-from pathlib import Path
 from dataclasses import dataclass
-from typing import Optional, Set
+from pathlib import Path
+from typing import Optional
+
+import yaml
+
 
 @dataclass
 class LanguageRule:
@@ -10,7 +12,7 @@ class LanguageRule:
     extensions: list[str]
     prompt: str
 
-def load_rules(rules_dir: Path, allowed_extensions: Optional[Set[str]] = None) -> dict[str, LanguageRule]:
+def load_rules(rules_dir: Path, allowed_extensions: Optional[set[str]] = None) -> dict[str, LanguageRule]:
     """Carga reglas de los subdirectorios, opcionalmente filtrando por extensiones."""
     rules_map = {}
     if not rules_dir.is_dir():
@@ -26,7 +28,7 @@ def load_rules(rules_dir: Path, allowed_extensions: Optional[Set[str]] = None) -
         if not config_path.exists() or not prompt_path.exists():
             continue
 
-        with open(config_path, "r", encoding="utf-8") as f:
+        with open(config_path, encoding="utf-8") as f:
             config = yaml.safe_load(f)
         
         prompt = prompt_path.read_text(encoding="utf-8").strip()

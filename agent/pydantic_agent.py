@@ -4,7 +4,7 @@ import dspy
 from pydantic_ai import Agent, RunContext
 
 from deps.deps import Deps, FindingsList
-from prompts.signatures import StaticCodeAnalysis, PromptComposer
+from prompts.signatures import PromptComposer, StaticCodeAnalysis
 
 # DSPy config
 api_key = os.getenv("OPENAI_API_KEY")

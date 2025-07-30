@@ -3,17 +3,16 @@ import asyncio
 import json
 import re
 import subprocess
-import yaml
 from collections import defaultdict
-from dataclasses import asdict
 from pathlib import Path
-from typing import Set, Tuple, List
 
 import httpx
+import yaml
 
-import config  # Import to override environment variables
-from deps.deps import FindingsList, Finding
+import config  # noqa: F401 # Import to override environment variables
 from agent.rules import load_rules
+from deps.deps import Finding, FindingsList
+
 
 def load_whitelist(path: Path) -> list[str]:
     if not path.exists():
@@ -22,7 +21,7 @@ def load_whitelist(path: Path) -> list[str]:
         cfg = yaml.safe_load(f)
     return cfg.get("whitelist", {}).get("extensions", [])
 
-def load_blacklist(path: Path) -> Tuple[Set[str], Set[str]]:
+def load_blacklist(path: Path) -> tuple[set[str], set[str]]:
     if not path.exists():
         return set(), set()
     with open(path, encoding="utf-8") as f:
@@ -65,7 +64,7 @@ def get_repo(url: str, base_dir: Path = Path("repos")) -> Path:
 
     if repo_path.exists():
         print(f"[+] Repository already exists at {repo_path}.")
-        print(f"[+] Resetting to remote state of default branch...")
+        print("[+] Resetting to remote state of default branch...")
         try:
             subprocess.run(["git", "fetch", "origin"], cwd=repo_path, check=True, capture_output=True)
             subprocess.run(["git", "reset", "--hard", "origin/HEAD"], cwd=repo_path, check=True, capture_output=True)
@@ -83,7 +82,7 @@ def get_repo(url: str, base_dir: Path = Path("repos")) -> Path:
             raise
     return repo_path
 
-def build_file_index(root: Path, allowed_exts: Set[str], ignored_dirs: Set[str], ignored_files: Set[str]) -> tuple[list[str], list[str]]:
+def build_file_index(root: Path, allowed_exts: set[str], ignored_dirs: set[str], ignored_files: set[str]) -> tuple[list[str], list[str]]:
     indexed_files = []
     non_indexed_files = []
 
@@ -101,7 +100,7 @@ def build_file_index(root: Path, allowed_exts: Set[str], ignored_dirs: Set[str],
                 non_indexed_files.append(path_str)
     return indexed_files, non_indexed_files
 
-def generate_markdown_report(findings: List[Finding], unanalyzed_files: List[str], output_path: Path):
+def generate_markdown_report(findings: list[Finding], unanalyzed_files: list[str], output_path: Path):
     """Generates a Markdown report with colors from the list of findings."""
     report_content = "# Security Analysis Report\n\nThis report details the security vulnerabilities found by the AI agent.\n"
 
@@ -226,7 +225,7 @@ async def main():
 
     # 5. Generate and save the final report
     generate_markdown_report(all_findings, non_indexed_files, report_path)
-    print(f"\n--- FINAL REPORT ---")
+    print("\n--- FINAL REPORT ---")
     print(f"[+] Report successfully generated at: {report_path.resolve()}")
 
 if __name__ == "__main__":
