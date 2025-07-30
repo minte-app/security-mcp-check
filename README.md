@@ -4,7 +4,7 @@
 <a href="https://opensource.org/license/MIT"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
 </p>
 
-# MCP Security Check
+# AI Security Agent
 
 > An AI-driven agent that scans local or remote codebases, evaluates potential security issues based on extensible rules, and produces a comprehensive Markdown report.
 
@@ -58,8 +58,8 @@ security-mcp-check/
 
 1.  **Clone the repository:**
     ```bash
-    git clone https://github.com/your-username/security-mcp-check.git
-    cd security-mcp-check
+    git clone https://github.com/your-username/ai-security-agent.git
+    cd ai-security-agent
     ```
 
 2.  **Create and activate a virtual environment:**

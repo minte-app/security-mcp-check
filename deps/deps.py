@@ -10,13 +10,13 @@ from agent.rules import LanguageRule
 
 @dataclass
 class Deps:
-    """Dependencias accesibles vía RunContext.deps"""
+    """Dependencies accessible via RunContext.deps"""
 
     repo_root: Path
-    file_index: str  # Fichero que se está analizando
+    file_index: str  # File currently being analyzed
     selector: dspy.Module
     analyzer: dspy.Module
-    active_rule: Optional[LanguageRule] = None  # Regla para el lenguaje actual
+    active_rule: Optional[LanguageRule] = None  # Rule for the current language
     http: Optional[httpx.AsyncClient] = None
 
 

@@ -13,7 +13,7 @@ class LanguageRule:
 
 
 def load_rules(rules_dir: Path, allowed_extensions: Optional[set[str]] = None) -> dict[str, LanguageRule]:
-    """Carga reglas de los subdirectorios, opcionalmente filtrando por extensiones."""
+    """Loads rules from subdirectories, optionally filtering by extensions."""
     rules_map = {}
     if not rules_dir.is_dir():
         return rules_map
@@ -35,12 +35,12 @@ def load_rules(rules_dir: Path, allowed_extensions: Optional[set[str]] = None) -
 
         rule = LanguageRule(language=config.get("language", lang_dir.name), extensions=config.get("extensions", []), prompt=prompt)
 
-        # Si no se especifica un filtro, se cargan todas las reglas
+        # If no filter is specified, all rules are loaded
         if allowed_extensions is None:
             for ext in rule.extensions:
                 rules_map[ext.lower()] = rule
         else:
-            # Cargar solo si alguna de las extensiones de la regla está en la whitelist
+            # Load only if any of the rule's extensions are in the whitelist
             for ext in rule.extensions:
                 if ext.lower() in allowed_extensions:
                     rules_map[ext.lower()] = rule

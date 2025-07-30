@@ -2,22 +2,22 @@ import dspy
 
 
 class FileDiscovery(dspy.Signature):
-    """Filtra un listado de archivos según patrones (.js,.ts, etc.). No inventes rutas."""
+    """Filters a list of files based on patterns (.js, .ts, etc.). Do not invent paths."""
 
-    all_files: str = dspy.InputField(desc="Listado completo de paths relativos, uno por línea")
-    include_patterns: str = dspy.InputField(desc="Patrones a incluir, ej: .js,.ts", default=".js,.ts")
-    file_paths: list[str] = dspy.OutputField(desc="JSON array de paths a auditar")
+    all_files: str = dspy.InputField(desc="Complete list of relative paths, one per line")
+    include_patterns: str = dspy.InputField(desc="Patterns to include, e.g., .js,.ts", default=".js,.ts")
+    file_paths: list[str] = dspy.OutputField(desc="JSON array of paths to audit")
 
 
 class StaticCodeAnalysis(dspy.Signature):
-    """Analiza un archivo de código fuente y devuelve un reporte estructurado.
+    """Analyzes a source code file and returns a structured report.
 
-    **findings_json** debe ser un **array JSON** donde cada elemento es un objeto con:
-      - issue: breve título del problema
-      - severity: "CRITICAL" o "WARNING"
-      - explanation: por qué es un problema
-      - recommendation: cómo mitigarlo
-      - line_hint (opcional): línea o fragmento relevante
+    **findings_json** must be a **JSON array** where each element is an object with:
+      - issue: brief title of the problem
+      - severity: "CRITICAL" or "WARNING"
+      - explanation: why it is a problem
+      - recommendation: how to mitigate it
+      - line_hint (optional): relevant line or snippet
     """
 
     code: str = dspy.InputField(desc="Source code of the file to analyze")
@@ -27,11 +27,11 @@ class StaticCodeAnalysis(dspy.Signature):
 
 
 class PromptComposer(dspy.Signature):
-    """Crea el system_prompt para el agente de seguridad JS/TS."""
+    """Creates the system_prompt for the JS/TS security agent."""
 
-    mission: str = dspy.InputField(desc="Qué debe hacer el agente")
-    file_list: str = dspy.InputField(desc="Lista (truncada) de archivos disponibles, uno por línea")
-    severity_policy: str = dspy.InputField(desc="Reglas cómo clasificar en CRITICAL vs WARNING")
-    output_contract: str = dspy.InputField(desc="Formato exacto del output esperado")
-    tools_hint: str = dspy.InputField(desc="Qué tools hay y para qué sirven")
+    mission: str = dspy.InputField(desc="What the agent should do")
+    file_list: str = dspy.InputField(desc="(Truncated) list of available files, one per line")
+    severity_policy: str = dspy.InputField(desc="Rules for classifying as CRITICAL vs. WARNING")
+    output_contract: str = dspy.InputField(desc="Exact format of the expected output")
+    tools_hint: str = dspy.InputField(desc="What tools are available and what they are for")
     system_prompt: str = dspy.OutputField()
