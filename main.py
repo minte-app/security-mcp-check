@@ -3,41 +3,24 @@ import asyncio
 import json
 import re
 import subprocess
-from collections import defaultdict
 from pathlib import Path
 
 import httpx
-import yaml
 
 import config  # noqa: F401 # Import to override environment variables
 from agent.rules import load_rules
-from deps.deps import Finding, FindingsList
+from config import generate_markdown_report, load_blacklist, load_whitelist
+from deps.deps import FindingsList
 
-
-def load_whitelist(path: Path) -> list[str]:
-    if not path.exists():
-        return []
-    with open(path, encoding="utf-8") as f:
-        cfg = yaml.safe_load(f)
-    return cfg.get("whitelist", {}).get("extensions", [])
-
-def load_blacklist(path: Path) -> tuple[set[str], set[str]]:
-    if not path.exists():
-        return set(), set()
-    with open(path, encoding="utf-8") as f:
-        cfg = yaml.safe_load(f)
-    blacklist_cfg = cfg.get("blacklist", {})
-    ignored_dirs = set(blacklist_cfg.get("directories", []))
-    ignored_files = set(blacklist_cfg.get("files", []))
-    return ignored_dirs, ignored_files
 
 def parse_args():
     parser = argparse.ArgumentParser(description="AI Security Agent")
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--url", help="URL of the GitHub repo (e.g., https://github.com/user/repo)")
     group.add_argument("--directory", type=Path, help="Local path to the already cloned repo")
-    
+
     return parser.parse_args()
+
 
 def get_repo(url: str, base_dir: Path = Path("repos")) -> Path:
     base_dir.mkdir(parents=True, exist_ok=True)
@@ -46,13 +29,7 @@ def get_repo(url: str, base_dir: Path = Path("repos")) -> Path:
 
     def get_default_branch(path: Path) -> str:
         try:
-            result = subprocess.run(
-                ["git", "remote", "show", "origin"], 
-                cwd=path, 
-                check=True, 
-                capture_output=True, 
-                text=True
-            )
+            result = subprocess.run(["git", "remote", "show", "origin"], cwd=path, check=True, capture_output=True, text=True)
             match = re.search(r"HEAD branch: (\S+)", result.stdout)
             if match:
                 return match.group(1)
@@ -82,6 +59,7 @@ def get_repo(url: str, base_dir: Path = Path("repos")) -> Path:
             raise
     return repo_path
 
+
 def build_file_index(root: Path, allowed_exts: set[str], ignored_dirs: set[str], ignored_files: set[str]) -> tuple[list[str], list[str]]:
     indexed_files = []
     non_indexed_files = []
@@ -100,51 +78,17 @@ def build_file_index(root: Path, allowed_exts: set[str], ignored_dirs: set[str],
                 non_indexed_files.append(path_str)
     return indexed_files, non_indexed_files
 
-def generate_markdown_report(findings: list[Finding], unanalyzed_files: list[str], output_path: Path):
-    """Generates a Markdown report with colors from the list of findings."""
-    report_content = "# Security Analysis Report\n\nThis report details the security vulnerabilities found by the AI agent.\n"
-
-    if not findings:
-        report_content += "\n**No security vulnerabilities were found in the analyzed files.**\n"
-    else:
-        findings_by_file = defaultdict(list)
-        for f in findings:
-            findings_by_file[f.file_path].append(f)
-
-        for file_path, file_findings in sorted(findings_by_file.items()):
-            report_content += f"\n---\n\n### File: `{file_path}`\n\n"
-            report_content += "| Severity | Issue | Explanation | Recommendation | Line |\n"
-            report_content += "|----------|-------|-------------|----------------|------|\n"
-            for f in sorted(file_findings, key=lambda x: x.severity):
-                line = f.line_hint if f.line_hint is not None else "N/A"
-                recommendation = f.recommendation if f.recommendation is not None else "-"
-                
-                severity_cell = f.severity
-                if f.severity == "CRITICAL":
-                    severity_cell = "<font color='red'>CRITICAL</font>"
-                elif f.severity == "WARNING":
-                    severity_cell = "<font color='orange'>WARNING</font>"
-
-                report_content += f"| {severity_cell} | {f.issue} | {f.explanation} | {recommendation} | {line} |\n"
-
-    if unanalyzed_files:
-        report_content += "\n---\n\n## Unanalyzed Files\n\nThe following files were not analyzed because their extensions are not in the whitelist or they are in the blacklist:\n\n"
-        report_content += "\n".join([f"- `{f}`" for f in sorted(unanalyzed_files)])
-
-    # Ensure the reports directory exists
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(report_content, encoding="utf-8")
 
 async def main():
     args = parse_args()
 
     # 1. Load configurations
-    whitelisted_exts = set(e.lower() for e in load_whitelist(Path("whitelist.yaml")))
+    whitelisted_exts = set(e.lower() for e in load_whitelist())
     if not whitelisted_exts:
-        print("[x] The 'whitelist.yaml' file does not exist or is empty. Nothing to analyze.")
+        print("[x] The 'config.yaml' file does not exist, is empty, or has no whitelisted extensions. Nothing to analyze.")
         return
 
-    ignored_dirs, ignored_files = load_blacklist(Path("blacklist.yaml"))
+    ignored_dirs, ignored_files = load_blacklist()
     rules_map = load_rules(Path("rules"), allowed_extensions=whitelisted_exts)
     if not rules_map:
         print("[x] No rules found for the extensions specified in 'whitelist.yaml'.")
@@ -192,7 +136,7 @@ async def main():
                 continue
 
             print(f"[*] Analyzing {file_path} with {active_rule.language} rules...")
-            
+
             deps = Deps(
                 repo_root=repo_root,
                 file_index=file_path,
@@ -201,7 +145,7 @@ async def main():
                 http=client,
                 selector=None,
             )
-            
+
             instructions = (
                 f"Analyze the file '{file_path}' using the rules for {active_rule.language}. "
                 "First, call `read_current_file` to get the code, then call `analyze_code` to analyze it."
@@ -227,6 +171,7 @@ async def main():
     generate_markdown_report(all_findings, non_indexed_files, report_path)
     print("\n--- FINAL REPORT ---")
     print(f"[+] Report successfully generated at: {report_path.resolve()}")
+
 
 if __name__ == "__main__":
     try:

@@ -29,6 +29,7 @@ security_agent = Agent(
     output_type=FindingsList,
 )
 
+
 @security_agent.system_prompt
 async def system_prompt(ctx: RunContext[Deps]) -> str:
     rule = ctx.deps.active_rule
@@ -53,7 +54,7 @@ async def system_prompt(ctx: RunContext[Deps]) -> str:
     res = prompter(
         mission=mission,
         file_list=f"File to analyze: {ctx.deps.file_index}",
-        severity_policy=lang_instructions, # Severity rules are now part of the language prompt
+        severity_policy=lang_instructions,  # Severity rules are now part of the language prompt
         output_contract=output_contract,
         tools_hint=tools_hint,
     )
@@ -76,10 +77,6 @@ async def analyze_code(ctx: RunContext[Deps], code: str) -> str:
     """Runs the DSPy analysis on the code and returns the JSON of findings."""
     rule = ctx.deps.active_rule
     instructions = rule.prompt if rule else ""
-    
-    result = ctx.deps.analyzer(
-        code=code, 
-        filename=ctx.deps.file_index,
-        language_instructions=instructions
-    )
+
+    result = ctx.deps.analyzer(code=code, filename=ctx.deps.file_index, language_instructions=instructions)
     return result.findings_json

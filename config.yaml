@@ -1,0 +1,21 @@
+whitelist:
+  extensions: [".js", ".ts", ".py"]
+
+blacklist:
+  # Ignore any file inside these directories
+  directories:
+    - "repos"
+    - ".git"
+    - ".github"
+    - ".vscode"
+    - "node_modules"
+    - "dist"
+    - "build"
+    - "__pycache__"
+
+  # Ignored files by their name
+  files:
+    - "LICENSE"
+    - "LICENSE.md"
+    - ".gitignore"
+    - "README.md"

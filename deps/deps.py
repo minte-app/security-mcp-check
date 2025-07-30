@@ -16,7 +16,7 @@ class Deps:
     file_index: str  # Fichero que se está analizando
     selector: dspy.Module
     analyzer: dspy.Module
-    active_rule: Optional[LanguageRule] = None # Regla para el lenguaje actual
+    active_rule: Optional[LanguageRule] = None  # Regla para el lenguaje actual
     http: Optional[httpx.AsyncClient] = None
 
 
