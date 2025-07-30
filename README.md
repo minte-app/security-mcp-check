@@ -1,21 +1,26 @@
-<p align="center"><a href="https://minte.app/es" target="_blank"><img src="http://www.w3.org/2000/svg" width="400" alt="Security-Check Logo"></a></p>
+# MCP Security Check
 
 <p align="center">
 <a href="https://opensource.org/license/MIT"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
 </p>
 
-# MCP Security Check
+> An AI-driven agent that scans local or remote codebases, evaluates potential security issues based on extensible, OWASP Top 10-guided rules, and produces a comprehensive Markdown report.
 
-> An AI-driven agent that scans local or remote codebases, evaluates potential security issues based on extensible rules, and produces a comprehensive Markdown report.
+---
+
+### 📖 Full Documentation
+
+For a deep dive into the project's architecture, functionality, and a detailed guide, please see the 
+**[Full Explanation and Guide (explanation.md)](./explanation.md)**.
 
 ---
 
 ## 🎯 Features
 
 - **Flexible Code Analysis:** Scan repositories from a GitHub URL or a local directory.
-- **Extensible Rule System:** Define analysis rules for different programming languages. Each language can have its own configuration and prompt instructions.
-- **Configurable Whitelist & Blacklist:** Precisely control which files and directories to include or exclude from the analysis using `.yaml` configuration files.
-- **AI-Powered Analysis:** Leverages an AI agent to analyze code and identify security vulnerabilities based on the defined rules.
+- **OWASP Top 10 Guided:** The analysis prompts are based on the official OWASP Top 10 to ensure relevant and high-quality findings.
+- **Extensible Rule System:** Define analysis rules for different programming languages. Each language has its own configuration and prompt instructions.
+- **Centralized Configuration:** Precisely control which files and directories to analyze using a single `config.yaml` file.
 - **Markdown Reporting:** Generates a clear, easy-to-read security report in Markdown format, including severity levels and recommendations.
 - **Asynchronous by Design:** Built with `asyncio` and `httpx` for efficient, non-blocking analysis.
 
@@ -43,13 +48,13 @@ security-mcp-check/
 │     └─ prompt.md
 ├─ .env.example          # Environment variable template
 ├─ .gitignore
-├─ blacklist.yaml        # Files and directories to ignore
 ├─ config.py             # Configuration loader
+├─ config.yaml           # Whitelist and blacklist configuration
+├─ explanation.md        # Detailed project documentation
 ├─ main.py               # Main script entrypoint
 ├─ pyproject.toml
 ├─ README.md
-├─ requirements.txt
-└─ whitelist.yaml        # File extensions to analyze
+└─ requirements.txt
 ```
 
 ---
@@ -102,22 +107,23 @@ The agent will perform the analysis and generate a security report in the `repor
 
 ## 🔧 Configuration
 
--   **Whitelist:** Edit `whitelist.yaml` to define which file extensions the agent should analyze.
-    ```yaml
-    whitelist:
-      extensions: [".js", ".ts", ".py"]
-    ```
+All configuration is handled in `config.yaml`:
 
--   **Blacklist:** Edit `blacklist.yaml` to specify directories and files to be completely ignored during the scan.
-    ```yaml
-    blacklist:
-      directories:
-        - "node_modules"
-        - "dist"
-        - ".git"
-      files:
-        - "package-lock.json"
-    ```
+-   **`whitelist`**: Defines which file extensions the agent should analyze.
+-   **`blacklist`**: Specifies directories and files to be completely ignored.
+
+Example `config.yaml`:
+```yaml
+whitelist:
+  extensions: [".js", ".ts", ".py"]
+
+blacklist:
+  directories:
+    - "node_modules"
+    - "dist"
+  files:
+    - "package-lock.json"
+```
 
 -   **Language Rules:** Add or modify rules in the `rules/` directory. For each language, you need a `config.yaml` and a `prompt.md`.
 
@@ -129,9 +135,6 @@ The AI agent has access to a set of tools to perform its analysis. These tools a
 
 -   **`read_current_file()`**: Reads the content of the file currently being analyzed.
 -   **`analyze_code(code: str)`**: Triggers the security analysis on the provided code string and returns a list of findings.
-
-The agent follows a simple flow: first, it calls `read_current_file` to get the code, and then it passes that code to `analyze_code` to find vulnerabilities.
-
 ---
 
 ## 📄 Report Schema
@@ -149,8 +152,10 @@ The final report is a Markdown file. Each finding in the report includes:
 
 ## 🔐 Severity Policy
 
--   **CRITICAL**: Issues that could lead to severe security breaches, such as Remote Code Execution (RCE), privilege escalation, data exfiltration, use of `eval()` with external input, hardcoded secrets, and dangerous injection patterns.
--   **WARNING**: All other security issues, such as missing input validation, potential Denial of Service vectors, or insecure error handling.
+The analysis is guided by the principles of the **OWASP Top 10**. Findings are categorized as follows:
+
+-   **CRITICAL**: Issues that could lead to severe security breaches (RCE, SQLi, hardcoded secrets, etc.).
+-   **WARNING**: All other security issues (insecure error handling, missing validation, etc.).
 
 ---
 
