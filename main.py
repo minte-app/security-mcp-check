@@ -13,7 +13,14 @@ if sys.platform == "win32":
 
 import config  # noqa: F401 # Import to override environment variables
 from agent.rules import load_rules
-from config import generate_markdown_report, load_blacklist, load_whitelist
+from config import (
+    filter_files_by_cache,
+    generate_markdown_report,
+    load_blacklist,
+    load_cache,
+    load_whitelist,
+    save_cache,
+)
 from deps.deps import FindingsList
 
 
@@ -86,7 +93,7 @@ def build_file_index(root: Path, allowed_exts: set[str], ignored_dirs: set[str],
 async def main():
     args = parse_args()
 
-    # 1. Load configurations
+    # 1. Load configurations and cache
     whitelisted_exts = set(e.lower() for e in load_whitelist())
     if not whitelisted_exts:
         print("[x] The 'config.yaml' file does not exist, is empty, or has no whitelisted extensions. Nothing to analyze.")
@@ -103,28 +110,53 @@ async def main():
         if ext not in rules_map:
             print(f"[!] Warning: Extension '{ext}' is in the whitelist but no rule was found for it.")
 
-    # 2. Get the source code
+    cache = load_cache()
+
+    # 2. Get the source code and determine repo identifier
     if args.url:
+        repo_identifier = args.url
         try:
             repo_root = get_repo(args.url, Path("repos"))
         except subprocess.CalledProcessError:
             print("[x] The repository URL is incorrect or does not exist.")
             return
-    else:
+    else:  # args.directory
         if not args.directory or not args.directory.is_dir():
-            print("[x] The specified directory does not exist.")
+            print(f"[x] The specified directory '{args.directory}' does not exist.")
             return
         repo_root = args.directory.resolve()
+        try:
+            # Use git remote url as the most reliable identifier
+            result = subprocess.run(["git", "remote", "get-url", "origin"], cwd=repo_root, check=True, capture_output=True, text=True)
+            repo_identifier = result.stdout.strip()
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            # Fallback to relative path if not a git repo or no remote
+            print("[!] Warning: Could not determine git remote. Using directory path as cache key.")
+            repo_identifier = args.directory.as_posix()
 
-    # 3. Index files
-    file_index, non_indexed_files = build_file_index(repo_root, whitelisted_exts, ignored_dirs, ignored_files)
+    # 3. Index files and filter using cache
+    all_files, non_indexed_files = build_file_index(repo_root, whitelisted_exts, ignored_dirs, ignored_files)
     repo_name = repo_root.name
     report_path = Path("reports") / f"{repo_name}-security-report.md"
 
-    if not file_index:
+    if not all_files:
         print("[x] No files with the whitelisted extensions were found in the repository.")
-        generate_markdown_report([], non_indexed_files, report_path)
+        generate_markdown_report([], non_indexed_files, [], report_path)
         print(f"[+] Report generated for unanalyzed files at: {report_path.resolve()}")
+        return
+
+    repo_cache = cache.get(repo_identifier, {})
+    files_to_analyze, skipped_files, new_repo_cache = filter_files_by_cache(repo_root, repo_identifier, all_files, repo_cache)
+
+    if skipped_files:
+        print(f"[*] Skipping {len(skipped_files)} file(s) that have not changed.")
+
+    if not files_to_analyze:
+        print("[+] No files to analyze after cache check.")
+        generate_markdown_report([], non_indexed_files, skipped_files, report_path)
+        print(f"[+] Report generated with cached results at: {report_path.resolve()}")
+        cache[repo_identifier] = new_repo_cache
+        save_cache(cache)
         return
 
     # 4. Import and run the agent
@@ -132,7 +164,7 @@ async def main():
 
     all_findings = []
     async with httpx.AsyncClient() as client:
-        for file_path in file_index:
+        for file_path in files_to_analyze:
             file_ext = Path(file_path).suffix.lower()
             active_rule = rules_map.get(file_ext)
 
@@ -150,10 +182,7 @@ async def main():
                 selector=None,
             )
 
-            instructions = (
-                f"Analyze the file '{file_path}' using the rules for {active_rule.language}. "
-                "First, call `read_current_file` to get the code, then call `analyze_code` to analyze it."
-            )
+            instructions = f"Analyze the file '{file_path}' using the rules for {active_rule.language}. First, call `read_current_file` to get the code, then call `analyze_code` to analyze it."
 
             try:
                 result = await security_agent.run(instructions, deps=deps)
@@ -171,10 +200,13 @@ async def main():
             except Exception as e:
                 print(f"[x] Error analyzing {file_path}: {e}")
 
-    # 5. Generate and save the final report
-    generate_markdown_report(all_findings, non_indexed_files, report_path)
+    # 5. Generate and save the final report and cache
+    generate_markdown_report(all_findings, non_indexed_files, skipped_files, report_path)
     print("\n--- FINAL REPORT ---")
     print(f"[+] Report successfully generated at: {report_path.resolve()}")
+
+    cache[repo_identifier] = new_repo_cache
+    save_cache(cache)
 
 
 if __name__ == "__main__":

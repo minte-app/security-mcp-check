@@ -41,15 +41,8 @@ async def system_prompt(ctx: RunContext[Deps]) -> str:
         mission = f"Evaluate security vulnerabilities in a {rule.language} file."
         lang_instructions = rule.prompt
 
-    output_contract = (
-        "Return a JSON array: [{file_path, issue, severity, explanation, recommendation, line_hint?}]. "
-        "Nothing but the JSON, with no additional text."
-    )
-    tools_hint = (
-        "Available tools:\n"
-        "- read_current_file(): returns the code of the file currently being analyzed.\n"
-        "- analyze_code(code): analyzes the code and returns findings in JSON format."
-    )
+    output_contract = "Return a JSON array: [{file_path, issue, severity, explanation, recommendation, line_hint?}]. Nothing but the JSON, with no additional text."
+    tools_hint = "Available tools:\n- read_current_file(): returns the code of the file currently being analyzed.\n- analyze_code(code): analyzes the code and returns findings in JSON format."
 
     res = prompter(
         mission=mission,

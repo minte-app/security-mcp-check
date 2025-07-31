@@ -11,13 +11,14 @@
 ### 📖 Full Documentation
 
 For a deep dive into the project's architecture, functionality, and a detailed guide, please see the 
-**[Full Explanation and Guide (explanation.md)](./explanation.md)**.
+**[Full Explanation and Guide](./docs/explanation.md)**.
 
 ---
 
 ## 🎯 Features
 
 - **Flexible Code Analysis:** Scan repositories from a GitHub URL or a local directory.
+- **Intelligent Caching:** Automatically skips re-analyzing files that have not changed since the last scan, saving time and resources.
 - **OWASP Top 10 Guided:** The analysis prompts are based on the official OWASP Top 10 to ensure relevant and high-quality findings.
 - **Extensible Rule System:** Define analysis rules for different programming languages. Each language has its own configuration and prompt instructions.
 - **Centralized Configuration:** Precisely control which files and directories to analyze using a single `config.yaml` file.
@@ -31,26 +32,19 @@ For a deep dive into the project's architecture, functionality, and a detailed g
 ```
 security-mcp-check/
 ├─ agent/                # Core AI agent logic
-│  ├─ pydantic_agent.py
-│  └─ rules.py
 ├─ deps/                 # Dependency injection and data models
-│  └─ deps.py
+├─ docs/                 # Project documentation
+│  ├─ explanation.md
+│  └─ example.png
 ├─ prompts/              # AI prompt-related utilities
-│  └─ signatures.py
 ├─ reports/              # Output directory for generated Markdown reports
 ├─ repos/                # Default directory for cloned remote repositories
 ├─ rules/                # Language-specific analysis rules
-│  ├─ javascript/
-│  │  ├─ config.yaml
-│  │  └─ prompt.md
-│  └─ python/
-│     ├─ config.yaml
-│     └─ prompt.md
+├─ .agent_cache.json     # Caches file hashes to avoid re-analyzing unchanged files
 ├─ .env.example          # Environment variable template
 ├─ .gitignore
-├─ config.py             # Configuration loader
+├─ config.py             # Configuration loader and cache logic
 ├─ config.yaml           # Whitelist and blacklist configuration
-├─ explanation.md        # Detailed project documentation
 ├─ main.py               # Main script entrypoint
 ├─ pyproject.toml
 ├─ README.md
@@ -101,7 +95,25 @@ The agent can be run from the command line with a GitHub URL or a local director
     python main.py --directory repos/user_repo
     ```
 
-The agent will perform the analysis and generate a security report in the `reports/` directory.
+The agent will perform the analysis and generate a security report in the `reports/` directory. On the first run, it will also create an `.agent_cache.json` file in the project root to speed up subsequent analyses.
+
+---
+
+## 📄 Report Example
+
+The final report is a clean Markdown file. Here is an example of what it looks like:
+
+![Security Report Example](./docs/example.png)
+
+Each finding in the report includes:
+
+-   **File Path:** The path to the file where the issue was found.
+-   **Severity:** The severity of the issue (`CRITICAL` or `WARNING`), highlighted with color.
+-   **Issue:** A brief description of the vulnerability.
+-   **Explanation:** A more detailed explanation of the issue.
+-   **Recommendation:** A suggestion on how to fix the vulnerability.
+-   **Line Hint:** The approximate line number where the issue was detected.
+-   **Skipped Files:** A list of files that were not analyzed because they haven't changed since the last scan.
 
 ---
 
@@ -126,7 +138,6 @@ blacklist:
 ```
 
 -   **Language Rules:** Add or modify rules in the `rules/` directory. For each language, you need a `config.yaml` and a `prompt.md`.
-
 ---
 
 ## 🤖 Agent Tools
@@ -135,19 +146,6 @@ The AI agent has access to a set of tools to perform its analysis. These tools a
 
 -   **`read_current_file()`**: Reads the content of the file currently being analyzed.
 -   **`analyze_code(code: str)`**: Triggers the security analysis on the provided code string and returns a list of findings.
----
-
-## 📄 Report Schema
-
-The final report is a Markdown file. Each finding in the report includes:
-
--   **File Path:** The path to the file where the issue was found.
--   **Severity:** The severity of the issue (`CRITICAL` or `WARNING`), highlighted with color.
--   **Issue:** A brief description of the vulnerability.
--   **Explanation:** A more detailed explanation of the issue.
--   **Recommendation:** A suggestion on how to fix the vulnerability.
--   **Line Hint:** The line number where the issue was detected.
-
 ---
 
 ## 🔐 Severity Policy
